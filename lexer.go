@@ -36,18 +36,19 @@ const (
 	itemError itemType = iota // error occurred; value is text of error
 	itemEOF
 
-	itemSingleLineComment // A comment like --
-	itemMultiLineComment  // A multiline comment like /* ... */
-	itemKeyword           // SQL language keyword like SELECT, INSERT, etc.
-	itemIdentifier        // alphanumeric identifier or complex identifier like `a.b` and `c`.*
-	itemOperator          // operators like '=', '<>', etc.
-	itemLeftParen         // '('
-	itemRightParen        // ')'
-	itemComma             // ','
-	itemDot               // '.'
-	itemStatementEnd      // ';'
-	itemNumber            // simple number
-	itemString            // quoted string (includes quotes)
+	itemSingleLineComment    // A comment like --
+	itemMultiLineComment     // A multiline comment like /* ... */
+	itemKeyword              // SQL language keyword like SELECT, INSERT, etc.
+	itemIdentifier           // alphanumeric non-keyword identifier
+	itemBacktickedIdentifier // '`users`'
+	itemOperator             // operators like '=', '<>', etc.
+	itemLeftParen            // '('
+	itemRightParen           // ')'
+	itemComma                // ','
+	itemDot                  // '.'
+	itemStatementEnd         // ';'
+	itemNumber               // simple number
+	itemString               // quoted string (includes quotes)
 )
 
 // keywords is a list of reserved SQL keywords
@@ -272,7 +273,11 @@ func (l *Lexer) acceptRun(valid string) {
 
 // isSpace reports whether r is a whitespace character (space or end of line).
 func isWhitespace(r rune) bool {
-	return r == ' ' || r == '\t' || r == '\r' || r == '\n'
+	return r == ' ' || r == '\t' || isNewline(r)
+}
+
+func isNewline(r rune) bool {
+	return r == '\r' || r == '\n'
 }
 
 // isAlphaNumeric reports whether r is an alphabetic, digit, or underscore.
@@ -358,6 +363,12 @@ func lexWhitespace(l *Lexer) stateFn {
 		case isOperator(r):
 			return lexOperator
 
+		case isDot(r):
+			l.emit(itemDot)
+
+		case isBacktick(r):
+			return lexIdentifierWithBacktick
+
 		case r == '"' || r == '\'':
 			return lexString
 
@@ -383,8 +394,7 @@ func lexSingleLineComment(l *Lexer) stateFn {
 		switch r := l.next(); {
 		case r == eof:
 			return l.errorf("eof found in middle of multi-line comment")
-		case r == '\n':
-		case r == '\r':
+		case r == '\n' || r == '\r':
 			l.emit(itemSingleLineComment)
 			return lexWhitespace
 		default:
@@ -416,41 +426,32 @@ func lexOperator(l *Lexer) stateFn {
 }
 
 func lexString(l *Lexer) stateFn {
+	// backup and retrieve which type of quote was used, " or '
+	l.backup()
 	quote := l.next()
 
 	for {
-		n := l.next()
-
-		if n == eof {
+		switch n := l.next(); {
+		case n == eof || isNewline(n):
+			l.backup()
 			return l.errorf("unterminated quoted string")
-		}
-		if n == '\\' {
-			//TODO: fix possible problems with NO_BACKSLASH_ESCAPES mode
+		case n == '\\':
 			if l.peek() == eof {
 				return l.errorf("unterminated quoted string")
 			}
-			l.next()
-		}
-
-		if n == quote {
-			if l.peek() == quote {
-				l.next()
-			} else {
-				l.emit(itemString)
-				return lexWhitespace
-			}
+		case n == quote:
+			// TODO: detect triple quoted strings
+			l.emit(itemString)
+			return lexWhitespace
 		}
 	}
-
 }
 
 func lexIdentifierOrKeyword(l *Lexer) stateFn {
 	for {
 		switch r := l.next(); {
 		case isAlphaNumeric(r):
-			// absorb.
-		case isBacktick(r):
-			l.ignore()
+		// absorb.
 		case isDot(r):
 			// emit the identifier before the dot
 			l.backup()
@@ -470,6 +471,21 @@ func lexIdentifierOrKeyword(l *Lexer) stateFn {
 				l.emit(itemIdentifier)
 			}
 			return lexWhitespace
+		}
+	}
+}
+
+func lexIdentifierWithBacktick(l *Lexer) stateFn {
+	for {
+		switch r := l.next(); {
+		case isAlphaNumeric(r):
+		// absorb.
+		case isBacktick(r):
+			l.emit(itemBacktickedIdentifier)
+			return lexWhitespace
+		default:
+			l.backup()
+			return l.errorf("unterminated backtick")
 		}
 	}
 }
