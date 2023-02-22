@@ -1,4 +1,4 @@
-package sqlparser
+package lex
 
 // Lexer based on Rob Pike's talk https://talks.golang.org/2011/lex.slide#1
 
@@ -10,45 +10,49 @@ import (
 )
 
 type Item struct {
-	typ  itemType // this Item's type
-	val  string   // the raw value of the Item
+	Typ  itemType // this Item's type
+	Val  string   // the raw value of the Item
+	Line int      // the line number within the input string
 	pos  int      // the starting position, in bytes
-	line int      // the line number within the input string
 }
 
 func (i Item) String() string {
-	switch i.typ {
-	case itemEOF:
+	switch i.Typ {
+	case ItemEOF:
 		return "EOF"
-	case itemError:
-		return i.val
+	case ItemError:
+		return i.Val
 	}
-	if len(i.val) > 10 {
-		return fmt.Sprintf("%.10q...", i.val)
+	if len(i.Val) > 10 {
+		return fmt.Sprintf("%.10q...", i.Val)
 	}
-	return fmt.Sprintf("%q", i.val)
+	return fmt.Sprintf("%q", i.Val)
 }
 
-type itemType int
+type itemType string
 
 // itemType identifies the type of lex items
 const (
-	itemError itemType = iota // error occurred; value is text of error
-	itemEOF
+	ItemError                itemType = "ItemError"                // error occurred; value is text of error
+	ItemEOF                           = "ItemEOF"                  // end of file
+	ItemSingleLineComment             = "ItemSingleLineComment"    // A comment like --
+	ItemMultiLineComment              = "ItemMultiLineComment"     // A multiline comment like /* ... */
+	ItemKeyword                       = "ItemKeyword"              // SQL language keyword like SELECT, INSERT, etc.
+	ItemIdentifier                    = "ItemIdentifier"           // alphanumeric non-keyword identifier
+	ItemBacktickedIdentifier          = "ItemBacktickedIdentifier" // '`users`'
+	ItemOperator                      = "ItemOperator"             // operators like '=', '<>', etc.
+	ItemLeftParen                     = "ItemLeftParen"            // '('
+	ItemRightParen                    = "ItemRightParen"           // ')'
+	ItemComma                         = "ItemComma"                // ','
+	ItemDot                           = "ItemDot"                  // '.'
+	ItemStatementEnd                  = "ItemStatementEnd"         // ';'
+	ItemNumber                        = "ItemNumber"               // simple number
+	ItemString                        = "ItemString"               // quoted string (includes quotes)
+)
 
-	itemSingleLineComment    // A comment like --
-	itemMultiLineComment     // A multiline comment like /* ... */
-	itemKeyword              // SQL language keyword like SELECT, INSERT, etc.
-	itemIdentifier           // alphanumeric non-keyword identifier
-	itemBacktickedIdentifier // '`users`'
-	itemOperator             // operators like '=', '<>', etc.
-	itemLeftParen            // '('
-	itemRightParen           // ')'
-	itemComma                // ','
-	itemDot                  // '.'
-	itemStatementEnd         // ';'
-	itemNumber               // simple number
-	itemString               // quoted string (includes quotes)
+const (
+	KeywordFrom = "from"
+	KeywordAs   = "as"
 )
 
 // keywords is a list of reserved SQL keywords
@@ -181,10 +185,23 @@ func Lex(input string) *Lexer {
 }
 
 // NextItem returns the next Item from the input. The Lexer has to be
-// drained (all items received until itemEOF or itemError) - otherwise
+// drained (all items received until ItemEOF or ItemError) - otherwise
 // the Lexer goroutine will leak.
 func (l *Lexer) NextItem() Item {
 	return <-l.items
+}
+
+func (l *Lexer) ReadAll() []Item {
+	var items []Item
+	for {
+		item := l.NextItem()
+		items = append(items, item)
+		if item.Typ == ItemEOF || item.Typ == ItemError {
+			break
+		}
+	}
+
+	return items
 }
 
 // run runs the lexer - should be run in a separate goroutine.
@@ -197,10 +214,10 @@ func (l *Lexer) run() {
 
 func (l *Lexer) emit(t itemType) {
 	l.items <- Item{
-		typ:  t,
-		val:  l.input[l.start:l.pos],
+		Typ:  t,
+		Val:  l.input[l.start:l.pos],
 		pos:  l.pos,
-		line: l.line,
+		Line: l.line,
 	}
 	l.start = l.pos
 }
@@ -247,10 +264,10 @@ func (l *Lexer) peek() rune {
 // a nil pointer that will be the next state.
 func (l *Lexer) errorf(format string, args ...interface{}) stateFn {
 	l.items <- Item{
-		typ:  itemError,
-		val:  fmt.Sprintf(format, args...),
+		Typ:  ItemError,
+		Val:  fmt.Sprintf(format, args...),
 		pos:  l.pos,
-		line: l.line,
+		Line: l.line,
 	}
 	return nil
 }
@@ -318,7 +335,7 @@ func lexNumber(l *Lexer) stateFn {
 		l.next()
 		return l.errorf("bad number syntax: %q", l.input[l.start:l.pos])
 	}
-	l.emit(itemNumber)
+	l.emit(ItemNumber)
 	return lexWhitespace
 }
 
@@ -337,34 +354,34 @@ func lexWhitespace(l *Lexer) stateFn {
 			l.ignore()
 
 		case r == eof:
-			l.emit(itemEOF)
+			l.emit(ItemEOF)
 			return nil
 
 		case r == '(':
 			l.next()
-			l.emit(itemLeftParen)
+			l.emit(ItemLeftParen)
 			return lexWhitespace
 
 		case r == ')':
 			l.next()
-			l.emit(itemRightParen)
+			l.emit(ItemRightParen)
 			return lexWhitespace
 
 		case r == ',':
 			l.next()
-			l.emit(itemComma)
+			l.emit(ItemComma)
 			return lexWhitespace
 
 		case r == ';':
 			l.next()
-			l.emit(itemStatementEnd)
+			l.emit(ItemStatementEnd)
 			return lexWhitespace
 
 		case isOperator(r):
 			return lexOperator
 
 		case isDot(r):
-			l.emit(itemDot)
+			l.emit(ItemDot)
 
 		case isBacktick(r):
 			return lexIdentifierWithBacktick
@@ -388,14 +405,14 @@ func lexWhitespace(l *Lexer) stateFn {
 func lexSingleLineComment(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], multiLineCommentEnd) {
-			l.emit(itemMultiLineComment)
+			l.emit(ItemMultiLineComment)
 			return lexWhitespace
 		}
 		switch r := l.next(); {
 		case r == eof:
 			return l.errorf("eof found in middle of multi-line comment")
 		case r == '\n' || r == '\r':
-			l.emit(itemSingleLineComment)
+			l.emit(ItemSingleLineComment)
 			return lexWhitespace
 		default:
 			// absorb
@@ -406,7 +423,7 @@ func lexSingleLineComment(l *Lexer) stateFn {
 func lexMultiLineComment(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], multiLineCommentEnd) {
-			l.emit(itemMultiLineComment)
+			l.emit(ItemMultiLineComment)
 			return lexWhitespace
 		}
 		switch r := l.next(); {
@@ -421,7 +438,7 @@ func lexMultiLineComment(l *Lexer) stateFn {
 func lexOperator(l *Lexer) stateFn {
 	operators := "+-*/=><~|^&%"
 	l.acceptRun(operators)
-	l.emit(itemOperator)
+	l.emit(ItemOperator)
 	return lexWhitespace
 }
 
@@ -441,7 +458,7 @@ func lexString(l *Lexer) stateFn {
 			}
 		case n == quote:
 			// TODO: detect triple quoted strings
-			l.emit(itemString)
+			l.emit(ItemString)
 			return lexWhitespace
 		}
 	}
@@ -455,20 +472,20 @@ func lexIdentifierOrKeyword(l *Lexer) stateFn {
 		case isDot(r):
 			// emit the identifier before the dot
 			l.backup()
-			l.emit(itemIdentifier)
+			l.emit(ItemIdentifier)
 
 			// emit the dot
 			l.next()
-			l.emit(itemDot)
+			l.emit(ItemDot)
 		default:
 			if r != eof {
 				l.backup()
 			}
 			word := l.input[l.start:l.pos]
 			if _, ok := keywords[strings.ToLower(word)]; ok {
-				l.emit(itemKeyword)
+				l.emit(ItemKeyword)
 			} else {
-				l.emit(itemIdentifier)
+				l.emit(ItemIdentifier)
 			}
 			return lexWhitespace
 		}
@@ -481,7 +498,7 @@ func lexIdentifierWithBacktick(l *Lexer) stateFn {
 		case isAlphaNumeric(r):
 		// absorb.
 		case isBacktick(r):
-			l.emit(itemBacktickedIdentifier)
+			l.emit(ItemBacktickedIdentifier)
 			return lexWhitespace
 		default:
 			l.backup()
