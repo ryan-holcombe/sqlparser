@@ -14,10 +14,15 @@ const (
 	ColumnAsterisk = "*"
 )
 
+type Validator interface {
+	Valid() bool
+}
+
 type Query struct {
 	Comments []string
 	Stmt     Statement
 	Selects  []Column
+	Froms    []Table
 }
 
 type Column struct {
@@ -26,10 +31,15 @@ type Column struct {
 	Alias  string
 }
 
-func (q *Query) addComment(comment string) {
-	q.Comments = append(q.Comments, comment)
+func (c Column) Valid() bool {
+	return c.Column != ""
 }
 
-func (q *Query) addSelect(column Column) {
-	q.Selects = append(q.Selects, column)
+type Table struct {
+	Name  string
+	Alias string
+}
+
+func (t Table) Valid() bool {
+	return t.Name != ""
 }

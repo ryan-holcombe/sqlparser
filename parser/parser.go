@@ -3,7 +3,6 @@ package parser
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/ryan-holcombe/sqlparser/collection"
 	"github.com/ryan-holcombe/sqlparser/lex"
@@ -34,6 +33,30 @@ func (p *parser) errorf(format string, args ...interface{}) stateFn {
 	return p.error(fmt.Errorf(format, args...))
 }
 
+func (p *parser) addComment(comment string, next stateFn) stateFn {
+	if !p.validate(&comment) {
+		return p.errorf("invalid comment found")
+	}
+	p.query.Comments = append(p.query.Comments, comment)
+	return next
+}
+
+func (p *parser) addSelect(column Column, next stateFn) stateFn {
+	if !p.validate(&column) {
+		return p.errorf("invalid select column found")
+	}
+	p.query.Selects = append(p.query.Selects, column)
+	return next
+}
+
+func (p *parser) addFrom(from Table, next stateFn) stateFn {
+	if !p.validate(&from) {
+		return p.errorf("invalid table found in FROM clause")
+	}
+	p.query.Froms = append(p.query.Froms, from)
+	return next
+}
+
 func (p *parser) mustNext() lex.Item {
 	item, ok := p.iter.Next()
 	if !ok {
@@ -52,7 +75,18 @@ func (p *parser) mustPeek() lex.Item {
 	return item
 }
 
-type stateFn func(*parser) stateFn
+func (p *parser) skip() {
+	p.mustNext()
+	return
+}
+
+func (p *parser) validate(typ interface{}) bool {
+	if valid, ok := typ.(Validator); ok {
+		return valid.Valid()
+	}
+
+	return true
+}
 
 func Parse(in string) (*Query, error) {
 	l := lex.Lex(in)
@@ -66,73 +100,4 @@ func Parse(in string) (*Query, error) {
 	}
 
 	return p.run()
-}
-
-func isKeyword(item lex.Item, keyword string) bool {
-	if item.Typ != lex.ItemKeyword {
-		return false
-	}
-
-	return strings.ToLower(keyword) == strings.ToLower(item.Val)
-}
-
-func sqlStatement(p *parser) stateFn {
-	next := p.mustNext()
-	switch next.Typ {
-	case lex.ItemMultiLineComment, lex.ItemSingleLineComment:
-		p.query.addComment(next.Val)
-		return sqlStatement
-	case lex.ItemKeyword:
-		switch strings.ToUpper(next.Val) {
-		case StatementSelect.String():
-			p.query.Stmt = StatementSelect
-			return sqlColumns
-		default:
-			return p.errorf("unsupported keyword found [%s]", next.Val)
-		}
-	default:
-		return p.errorf("unsupported next type [%v] found within [%s]", next.Typ, "sqlStatement")
-	}
-}
-
-func sqlColumns(p *parser) stateFn {
-	var col Column
-	for {
-		next := p.mustNext()
-		switch {
-		case next.Typ == lex.ItemComma: // a ',' indicates the end of a select statement item
-			p.query.addSelect(col)
-			return sqlColumns
-		case isKeyword(next, lex.KeywordFrom):
-			p.query.addSelect(col)
-			return sqlFrom
-		case isKeyword(next, lex.KeywordAs): // AS means the next identifier is an alias
-			switch alias := p.mustNext(); alias.Typ {
-			case lex.ItemIdentifier:
-				col.Alias = alias.Val
-				continue
-			default:
-				return p.errorf("expected identifier, found [%v]", alias.Typ)
-			}
-		case next.Typ == lex.ItemIdentifier, next.Typ == lex.ItemBacktickedIdentifier:
-			switch peek := p.mustPeek(); peek.Typ {
-			case lex.ItemDot: // '.' indicates this is a table/column combo
-				col.Table = next.Val
-				p.mustNext()
-				continue
-			default:
-				col.Column += next.Val
-				continue
-			}
-		case next.Val == ColumnAsterisk: // '*' indicates a wildcard
-			col.Column = ColumnAsterisk
-			continue
-		default:
-			return p.errorf("unsupported next type [%v] found within [%s]", next.Typ, "sqlColumns")
-		}
-	}
-}
-
-func sqlFrom(p *parser) stateFn {
-	return nil
 }

@@ -34,25 +34,35 @@ type itemType string
 // itemType identifies the type of lex items
 const (
 	ItemError                itemType = "ItemError"                // error occurred; value is text of error
-	ItemEOF                           = "ItemEOF"                  // end of file
-	ItemSingleLineComment             = "ItemSingleLineComment"    // A comment like --
-	ItemMultiLineComment              = "ItemMultiLineComment"     // A multiline comment like /* ... */
-	ItemKeyword                       = "ItemKeyword"              // SQL language keyword like SELECT, INSERT, etc.
-	ItemIdentifier                    = "ItemIdentifier"           // alphanumeric non-keyword identifier
-	ItemBacktickedIdentifier          = "ItemBacktickedIdentifier" // '`users`'
-	ItemOperator                      = "ItemOperator"             // operators like '=', '<>', etc.
-	ItemLeftParen                     = "ItemLeftParen"            // '('
-	ItemRightParen                    = "ItemRightParen"           // ')'
-	ItemComma                         = "ItemComma"                // ','
-	ItemDot                           = "ItemDot"                  // '.'
-	ItemStatementEnd                  = "ItemStatementEnd"         // ';'
-	ItemNumber                        = "ItemNumber"               // simple number
-	ItemString                        = "ItemString"               // quoted string (includes quotes)
+	ItemEOF                  itemType = "ItemEOF"                  // end of file
+	ItemSingleLineComment    itemType = "ItemSingleLineComment"    // A comment like --
+	ItemMultiLineComment     itemType = "ItemMultiLineComment"     // A multiline comment like /* ... */
+	ItemKeyword              itemType = "ItemKeyword"              // SQL language keyword like SELECT, INSERT, etc.
+	ItemIdentifier           itemType = "ItemIdentifier"           // alphanumeric non-keyword identifier
+	ItemBacktickedIdentifier itemType = "ItemBacktickedIdentifier" // '`users`'
+	ItemOperator             itemType = "ItemOperator"             // operators like '=', '<>', etc.
+	ItemLeftParen            itemType = "ItemLeftParen"            // '('
+	ItemRightParen           itemType = "ItemRightParen"           // ')'
+	ItemComma                itemType = "ItemComma"                // ','
+	ItemDot                  itemType = "ItemDot"                  // '.'
+	ItemStatementEnd         itemType = "ItemStatementEnd"         // ';'
+	ItemNumber               itemType = "ItemNumber"               // simple number
+	ItemString               itemType = "ItemString"               // quoted string (includes quotes)
 )
 
 const (
 	KeywordFrom = "from"
-	KeywordAs   = "as"
+
+	KeywordAs = "as"
+
+	KeywordJoin  = "join"
+	KeywordLeft  = "left"
+	KeywordRight = "right"
+	KeywordInner = "inner"
+	KeywordOuter = "outer"
+	KeywordFull  = "full"
+
+	KeywordWhere = "where"
 )
 
 // keywords is a list of reserved SQL keywords
@@ -404,14 +414,11 @@ func lexWhitespace(l *Lexer) stateFn {
 
 func lexSingleLineComment(l *Lexer) stateFn {
 	for {
-		if strings.HasPrefix(l.input[l.pos:], multiLineCommentEnd) {
-			l.emit(ItemMultiLineComment)
-			return lexWhitespace
-		}
 		switch r := l.next(); {
 		case r == eof:
 			return l.errorf("eof found in middle of multi-line comment")
 		case r == '\n' || r == '\r':
+			l.backup() // do not emit the newline
 			l.emit(ItemSingleLineComment)
 			return lexWhitespace
 		default:
@@ -423,6 +430,7 @@ func lexSingleLineComment(l *Lexer) stateFn {
 func lexMultiLineComment(l *Lexer) stateFn {
 	for {
 		if strings.HasPrefix(l.input[l.pos:], multiLineCommentEnd) {
+			l.acceptRun(multiLineCommentEnd)
 			l.emit(ItemMultiLineComment)
 			return lexWhitespace
 		}
@@ -430,7 +438,7 @@ func lexMultiLineComment(l *Lexer) stateFn {
 		case r == eof:
 			return l.errorf("eof found in middle of multi-line comment")
 		default:
-			l.ignore()
+			// absorb
 		}
 	}
 }

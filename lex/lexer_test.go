@@ -19,11 +19,11 @@ func requireItems(t *testing.T, items []Item, tokens ...interface{}) {
 
 		switch token := tokens[i].(type) {
 		case string:
-			require.Equal(t, item.Val, tokens[i], "index %d: expected item val [%s], got [%s]", i, tokens[i], item.Val)
+			require.Equal(t, tokens[i], item.Val, "index %d: expected item val [%s], got [%s]", i, tokens[i], item.Val)
 		case itemType:
-			require.Equal(t, item.Typ, tokens[i], "index %d: expected item type [%v], got [%v]", i, tokens[i], item.Typ)
+			require.Equal(t, tokens[i], item.Typ, "index %d: expected item type [%v], got [%v]", i, tokens[i], item.Typ)
 		case Item:
-			require.Equal(t, item, token, "index %d: expected item [%v], got [%v]", i, tokens[i], item)
+			require.Equal(t, token, item, "index %d: expected item [%v], got [%v]", i, tokens[i], item)
 		default:
 			require.Failf(t, "unsupported token type", "found: %v", token)
 		}
