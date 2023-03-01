@@ -77,7 +77,6 @@ func (p *parser) mustPeek() lex.Item {
 
 func (p *parser) skip() {
 	p.mustNext()
-	return
 }
 
 func (p *parser) validate(typ interface{}) bool {

@@ -14,7 +14,7 @@ func isKeyword(item lex.Item, keywords ...string) bool {
 	}
 
 	for _, k := range keywords {
-		if strings.ToLower(k) == strings.ToLower(item.Val) {
+		if strings.EqualFold(k, item.Val) {
 			return true
 		}
 	}

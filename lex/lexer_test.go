@@ -75,6 +75,28 @@ SELECT name
 	})
 }
 
+func TestLex_Comments(t *testing.T) {
+	t.Run("single line", func(t *testing.T) {
+		input := strings.TrimSpace(`-- this is a comment
+SELECT name
+	FROM users.person;
+`)
+		requireItems(t, testExec(input), "-- this is a comment", "SELECT", "name", "FROM", "users", ItemDot, "person", ItemStatementEnd, ItemEOF)
+
+	})
+
+	t.Run("multi line", func(t *testing.T) {
+		input := strings.TrimSpace(`/* this is a comment
+that spans multiple lines
+*/
+SELECT name
+	FROM users.person;
+`)
+		requireItems(t, testExec(input), "/* this is a comment\nthat spans multiple lines\n*/", "SELECT", "name", "FROM", "users", ItemDot, "person", ItemStatementEnd, ItemEOF)
+
+	})
+}
+
 func TestLex_SimpleStatementWithWhereClause(t *testing.T) {
 	t.Run("single quotes", func(t *testing.T) {
 		input := "SELECT name FROM users.person WHERE name = 'Bob';"
