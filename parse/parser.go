@@ -1,4 +1,4 @@
-package query
+package parse
 
 import (
 	"errors"
@@ -13,9 +13,13 @@ var errNoToken = errors.New("no lex token found, when one was expected")
 type StateFn[V any] func(*Parser[V]) StateFn[V]
 
 type Parser[V any] struct {
+	Result *V
 	iter   *collection.Iterator[lex.Item]
 	err    error
-	result *V
+}
+
+func (p *Parser[V]) HasError() bool {
+	return p.err != nil
 }
 
 func (p *Parser[V]) Error(err error) StateFn[V] {
@@ -45,6 +49,23 @@ func (p *Parser[V]) MustPeek() lex.Item {
 	return item
 }
 
-func (p *Parser[V]) skip() {
+func (p *Parser[V]) Skip() {
 	p.MustNext()
+}
+
+func (p *Parser[V]) Get() (*V, error) {
+	return p.Result, p.err
+}
+
+func NewParser[V any](in string) *Parser[V] {
+	var result V
+
+	// read all the tokens
+	l := lex.Lex(in)
+	items := l.ReadAll()
+
+	return &Parser[V]{
+		Result: &result,
+		iter:   collection.NewIterator(items...),
+	}
 }

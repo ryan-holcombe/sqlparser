@@ -14,10 +14,6 @@ const (
 	ColumnAsterisk = "*"
 )
 
-type Validator interface {
-	Valid() bool
-}
-
 type Query struct {
 	Comments []string
 	Stmt     Statement

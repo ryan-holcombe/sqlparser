@@ -1,9 +1,14 @@
 package ddl
 
-type CreateTable struct {
+type Statement string
+
+func (s Statement) String() string {
+	return string(s)
 }
 
-type CreateTables []CreateTable
+const (
+	StatementCreate Statement = "CREATE"
+)
 
 /*
 type CreateTable struct {
