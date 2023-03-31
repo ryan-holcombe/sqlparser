@@ -1,6 +1,9 @@
 package query
 
 import (
+	"strings"
+
+	"github.com/ryan-holcombe/sqlparser/lex"
 	"github.com/ryan-holcombe/sqlparser/parse"
 )
 
@@ -35,4 +38,18 @@ func addComment(p *parse.Parser[Query], comment string, next parse.StateFn[Query
 	}
 	p.Result.Comments = append(p.Result.Comments, comment)
 	return next
+}
+
+func isKeyword(item lex.Item, keywords ...string) bool {
+	if item.Typ != lex.ItemKeyword {
+		return false
+	}
+
+	for _, k := range keywords {
+		if strings.EqualFold(k, item.Val) {
+			return true
+		}
+	}
+
+	return false
 }

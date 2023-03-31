@@ -7,20 +7,6 @@ import (
 	"github.com/ryan-holcombe/sqlparser/parse"
 )
 
-func isKeyword(item lex.Item, keywords ...string) bool {
-	if item.Typ != lex.ItemKeyword {
-		return false
-	}
-
-	for _, k := range keywords {
-		if strings.EqualFold(k, item.Val) {
-			return true
-		}
-	}
-
-	return false
-}
-
 func sqlStatement(p *parse.Parser[Query]) parse.StateFn[Query] {
 	next := p.MustNext()
 	switch next.Typ {

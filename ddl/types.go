@@ -1,43 +1,33 @@
 package ddl
 
-type Statement string
+type ColumnType string
 
-func (s Statement) String() string {
+func (s ColumnType) String() string {
 	return string(s)
 }
 
 const (
-	StatementCreate Statement = "CREATE"
+	ColumnTypeBool      ColumnType = "BOOL"
+	ColumnTypeInt64     ColumnType = "INT64"
+	ColumnTypeFloat64   ColumnType = "FLOAT64"
+	ColumnTypeNumeric   ColumnType = "NUMERIC"
+	ColumnTypeString    ColumnType = "STRING"
+	ColumnTypeBytes     ColumnType = "BYTES"
+	ColumnTypeDate      ColumnType = "DATE"
+	ColumnTypeTimestamp ColumnType = "TIMESTAMP"
+	ColumnTypeJSON      ColumnType = "JSON"
 )
 
-/*
 type CreateTable struct {
-	Name              ID
-	Columns           []ColumnDef
-	Constraints       []TableConstraint
-	PrimaryKey        []KeyPart
-	Interleave        *Interleave
-	RowDeletionPolicy *RowDeletionPolicy
-
-	Position Position // position of the "CREATE" token
+	Name     string
+	Comments []string
+	Columns  []TableColumn
 }
 
-type ColumnDef struct {
-	Name    ID
-	Type    Type
-	NotNull bool
-
-	Default   Expr // set if this column has a default value
-	Generated Expr // set of this is a generated column
-
-	Options ColumnOptions
-
-	Position Position // position of the column name
+type TableColumn struct {
+	Name     string
+	BaseType string // base type: BOOL, INT64, FLOAT64, NUMERIC, STRING, BYTES, DATE, TIMESTAMP, JSON
+	TypeSize string // the number in parentheses: STRING(10), STRING(MAX)
+	Array    bool
+	NotNull  bool
 }
-
-type Type struct {
-	Array bool
-	Base  TypeBase // Bool, Int64, Float64, Numeric, String, Bytes, Date, Timestamp
-	Len   int64    // if Base is String or Bytes; may be MaxLen
-}
-*/
